@@ -1,103 +1,91 @@
-# Goal
-
-A realistic, end‑to‑end practice project you can build quickly: call a public REST API, map the JSON to Java DTOs, filter the data, and persist it with Spring Data JPA + Hibernate in an H2 database. Includes setup, code, and tests.
+I have a coding interview in Java with Spring, JPA, Hibernate and more and I need to practice. In it, I will be asked to interact with an external API (use `https://jsonplaceholder.typicode.com/posts` as the consumed API), populate objects, filter them by some parameter and store them in a database. Show me how it's done and how do I set up the project. Don't do Unit Testing. Tell me the step-by-step if I create a Maven project in IntelliJ
 
 ---
 
-## 0) Prereqs
+Awesome—this is a classic interview task. Here’s a clean, no-tests, step-by-step way to build a Spring Boot app (Maven) that:
 
-* Java 17+ (use `java -version`)
-* Maven 3.9+ (or Gradle—Maven shown here)
-* An IDE (IntelliJ/Eclipse/VS Code)
-
----
-
-## 1) Generate the project
-
-Using Spring Initializr via CLI:
-
-```bash
-curl https://start.spring.io/starter.zip \
-  -d dependencies=web,data-jpa,h2,validation,lombok \
-  -d bootVersion=3.3.3 \
-  -d javaVersion=17 \
-  -d type=maven-project \
-  -d groupId=com.example \
-  -d artifactId=api2db \
-  -o api2db.zip
-unzip api2db.zip && cd api2db
-```
-
-> If you prefer without Lombok, omit it and write getters/setters/constructors manually.
+* Calls `https://jsonplaceholder.typicode.com/posts`
+* Maps the JSON to Java objects
+* Filters by a parameter (e.g., `userId`)
+* Persists results with JPA/Hibernate to an H2 database
+* Exposes endpoints so you can trigger the sync and query the saved data
 
 ---
 
-## 2) `pom.xml`
+# 1) Create the project (IntelliJ + Maven)
 
-(If you used Initializr, you already have this. Keep an eye on versions.)
+**Option A — Spring Initializr (easiest)**
+
+1. IntelliJ → **File → New → Project… → Spring Initializr**.
+2. **Language**: Java; **Build**: Maven; **Java**: 17 (or 21).
+3. Group: `com.example`, Artifact: `posts-demo`.
+4. Add dependencies:
+
+   * Spring Web
+   * Spring Data JPA
+   * H2 Database
+5. Finish.
+
+**Option B — Plain Maven**
+
+1. IntelliJ → **File → New → Project… → Maven** → Create from archetype (or empty).
+2. Replace the generated `pom.xml` with the one below (then **Reload Maven**).
+
+---
+
+# 2) `pom.xml`
 
 ```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.3</version>
+    <relativePath/> <!-- lookup parent from repository -->
+  </parent>
+
   <groupId>com.example</groupId>
-  <artifactId>api2db</artifactId>
+  <artifactId>posts-demo</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <name>api2db</name>
-  <description>Practice: External API → Filter → JPA/Hibernate</description>
+  <name>posts-demo</name>
+  <description>Spring Boot demo for external API + JPA</description>
+
   <properties>
     <java.version>17</java.version>
-    <spring-boot.version>3.3.3</spring-boot.version>
   </properties>
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-dependencies</artifactId>
-        <version>${spring-boot.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
+
   <dependencies>
+    <!-- Web (MVC + RestTemplate) -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+
+    <!-- JPA/Hibernate -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
+
+    <!-- In-memory DB for quick demo -->
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <scope>runtime</scope>
     </dependency>
+
+    <!-- Optional: validation for request params -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.projectlombok</groupId>
-      <artifactId>lombok</artifactId>
-      <optional>true</optional>
-    </dependency>
-
-    <!-- Test -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <!-- For HTTP stubbing in tests (optional but useful) -->
-    <dependency>
-      <groupId>com.github.tomakehurst</groupId>
-      <artifactId>wiremock-jre8</artifactId>
-      <version>2.35.2</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
+
   <build>
     <plugins>
       <plugin>
@@ -111,225 +99,259 @@ unzip api2db.zip && cd api2db
 
 ---
 
-## 3) Configuration (`src/main/resources/application.yml`)
+# 3) Application config
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:h2:mem:api2db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update # For dev only (creates/updates tables automatically)
-    show-sql: true
-    properties:
-      hibernate.format_sql: true
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+`src/main/resources/application.properties`
 
-app:
-  external:
-    base-url: https://jsonplaceholder.typicode.com
-    timeout-ms: 5000
+```properties
+# H2 (in-memory)
+spring.datasource.url=jdbc:h2:mem:postsdb;DB_CLOSE_DELAY=-1
+spring.datasource.username=sa
+spring.datasource.password=
+spring.datasource.driver-class-name=org.h2.Driver
+
+# Hibernate/JPA
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+
+# H2 Console (handy for inspection)
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# Logging
+logging.level.org.springframework.web.client.RestTemplate=INFO
+logging.level.org.hibernate.SQL=DEBUG
 ```
 
 ---
 
-## 4) Domain & Persistence
+# 4) Bootstrapping
 
-We’ll fetch *Posts* from a public API (`/posts`), then persist a subset. You can swap the API later—pattern stays the same.
-
-### 4.1) DTO for incoming JSON
-
-`src/main/java/com/example/api2db/external/PostDto.java`
+`src/main/java/com/example/postsdemo/PostsDemoApplication.java`
 
 ```java
-package com.example.api2db.external;
+package com.example.postsdemo;
 
-public record PostDto(Long userId, Long id, String title, String body) {}
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PostsDemoApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(PostsDemoApplication.class, args);
+    }
+}
 ```
 
-### 4.2) JPA Entity
+Add a `RestTemplate` bean:
 
-`src/main/java/com/example/api2db/post/Post.java`
+`src/main/java/com/example/postsdemo/config/RestClientConfig.java`
 
 ```java
-package com.example.api2db.post;
+package com.example.postsdemo.config;
+
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+@Configuration
+public class RestClientConfig {
+
+    @Bean
+    public RestTemplate restTemplate(RestTemplateBuilder builder) {
+        return builder.build();
+    }
+}
+```
+
+---
+
+# 5) DTO for the external API
+
+The JSON at `/posts` looks like:
+
+```json
+{ "userId": 1, "id": 1, "title": "...", "body": "..." }
+```
+
+`src/main/java/com/example/postsdemo/external/PostDto.java`
+
+```java
+package com.example.postsdemo.external;
+
+public class PostDto {
+    private Long userId;
+    private Long id;     // external id from JSONPlaceholder
+    private String title;
+    private String body;
+
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getBody() { return body; }
+    public void setBody(String body) { this.body = body; }
+}
+```
+
+---
+
+# 6) JPA Entity + Repository
+
+We’ll persist with a **surrogate primary key** and keep the remote ID as `externalId` (unique) for idempotent upserts.
+
+`src/main/java/com/example/postsdemo/domain/PostEntity.java`
+
+```java
+package com.example.postsdemo.domain;
 
 import jakarta.persistence.*;
-import lombok.*;
-import java.time.Instant;
 
 @Entity
 @Table(name = "posts", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_posts_external_id", columnNames = "external_id")
+        @UniqueConstraint(name = "uk_posts_external_id", columnNames = "external_id")
 })
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Post {
+public class PostEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long id; // DB PK
 
     @Column(name = "external_id", nullable = false)
-    private Long externalId; // from the API
+    private Long externalId; // remote API id
 
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(length = 200)
+    @Column(length = 500)
     private String title;
 
     @Column(length = 4000)
     private String body;
 
-    @Builder.Default
-    private Instant importedAt = Instant.now();
+    // Getters/setters
+    public Long getId() { return id; }
+    public Long getExternalId() { return externalId; }
+    public void setExternalId(Long externalId) { this.externalId = externalId; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getBody() { return body; }
+    public void setBody(String body) { this.body = body; }
 }
 ```
 
-### 4.3) Repository
-
-`src/main/java/com/example/api2db/post/PostRepository.java`
+`src/main/java/com/example/postsdemo/domain/PostRepository.java`
 
 ```java
-package com.example.api2db.post;
+package com.example.postsdemo.domain;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
-public interface PostRepository extends JpaRepository<Post, Long> {
-    Optional<Post> findByExternalId(Long externalId);
+public interface PostRepository extends JpaRepository<PostEntity, Long> {
+    Optional<PostEntity> findByExternalId(Long externalId);
+    List<PostEntity> findByExternalIdIn(Collection<Long> externalIds);
+
+    // For querying saved data
+    List<PostEntity> findByUserId(Long userId);
+    List<PostEntity> findByTitleContainingIgnoreCase(String titlePart);
 }
 ```
 
 ---
 
-## 5) HTTP Client Setup
+# 7) Service: fetch, filter, map, upsert
 
-Use Spring’s `WebClient` (reactive, lightweight) even in MVC apps.
+We’ll **filter on the server** by passing `?userId=…` to JSONPlaceholder (more efficient), then upsert into our DB.
 
-### 5.1) Config
-
-`src/main/java/com/example/api2db/config/HttpClientConfig.java`
+`src/main/java/com/example/postsdemo/service/PostService.java`
 
 ```java
-package com.example.api2db.config;
+package com.example.postsdemo.service;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.netty.http.client.HttpClient;
-import java.time.Duration;
-
-@Configuration
-public class HttpClientConfig {
-    @Bean
-    WebClient externalApiClient(
-            @Value("${app.external.base-url}") String baseUrl,
-            @Value("${app.external.timeout-ms}") long timeoutMs
-    ) {
-        HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofMillis(timeoutMs));
-
-        return WebClient.builder()
-                .baseUrl(baseUrl)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .exchangeStrategies(ExchangeStrategies.builder()
-                        .codecs(c -> c.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
-                        .build())
-                .build();
-    }
-}
-```
-
----
-
-## 6) Service: Fetch → Filter → Map → Upsert
-
-`src/main/java/com/example/api2db/post/PostImportService.java`
-
-```java
-package com.example.api2db.post;
-
-import com.example.api2db.external.PostDto;
-import lombok.RequiredArgsConstructor;
+import com.example.postsdemo.domain.PostEntity;
+import com.example.postsdemo.domain.PostRepository;
+import com.example.postsdemo.external.PostDto;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
-public class PostImportService {
-    private final WebClient externalApiClient;
-    private final PostRepository repo;
+public class PostService {
 
-    /**
-     * Import posts and store only those whose title contains the given keyword (case-insensitive).
-     */
-    @Transactional
-    public List<Post> importFilteredPosts(String keyword) {
-        String k = Objects.requireNonNullElse(keyword, "").toLowerCase();
+    private static final String POSTS_URL = "https://jsonplaceholder.typicode.com/posts";
+    private final RestTemplate restTemplate;
+    private final PostRepository postRepository;
 
-        List<PostDto> dtos = externalApiClient.get()
-                .uri("/posts")
-                .retrieve()
-                .bodyToFlux(PostDto.class)
-                .collectList()
-                .block();
-
-        if (dtos == null || dtos.isEmpty()) return List.of();
-
-        return dtos.stream()
-                .filter(d -> k.isBlank() || (d.title() != null && d.title().toLowerCase().contains(k)))
-                .map(this::toEntity)
-                .map(this::upsertByExternalId)
-                .toList();
+    public PostService(RestTemplate restTemplate, PostRepository postRepository) {
+        this.restTemplate = restTemplate;
+        this.postRepository = postRepository;
     }
 
-    private Post toEntity(PostDto d) {
-        return Post.builder()
-                .externalId(d.id())
-                .userId(d.userId())
-                .title(d.title())
-                .body(d.body())
-                .build();
+    public List<PostEntity> fetchAndSaveByUserId(long userId) {
+        String url = POSTS_URL + "?userId=" + userId;
+
+        PostDto[] response = restTemplate.getForObject(url, PostDto[].class);
+        List<PostDto> dtos = response == null ? List.of() : Arrays.asList(response);
+
+        // Defensive: also possible to filter client-side if interviewer asks
+        List<PostDto> filtered = dtos.stream()
+                .filter(p -> p.getUserId() != null && p.getUserId() == userId)
+                .collect(Collectors.toList());
+
+        return upsertPosts(filtered);
     }
 
-    /** Upsert by externalId to avoid duplicates on re-import. */
-    private Post upsertByExternalId(Post incoming) {
-        return repo.findByExternalId(incoming.getExternalId())
-                .map(existing -> {
-                    existing.setTitle(incoming.getTitle());
-                    existing.setBody(incoming.getBody());
-                    existing.setUserId(incoming.getUserId());
-                    return existing; // dirty-checked
-                })
-                .orElseGet(() -> repo.save(incoming));
+    private List<PostEntity> upsertPosts(List<PostDto> dtos) {
+        if (dtos.isEmpty()) return List.of();
+
+        // Load existing by externalId in bulk to avoid N+1
+        List<Long> extIds = dtos.stream().map(PostDto::getId).filter(Objects::nonNull).toList();
+        Map<Long, PostEntity> existingByExtId = postRepository.findByExternalIdIn(extIds).stream()
+                .collect(Collectors.toMap(PostEntity::getExternalId, Function.identity()));
+
+        List<PostEntity> toSave = new ArrayList<>();
+        for (PostDto dto : dtos) {
+            if (dto.getId() == null) continue;
+
+            PostEntity entity = existingByExtId.getOrDefault(dto.getId(), new PostEntity());
+            entity.setExternalId(dto.getId());
+            entity.setUserId(dto.getUserId());
+            entity.setTitle(dto.getTitle());
+            entity.setBody(dto.getBody());
+
+            toSave.add(entity);
+        }
+
+        return postRepository.saveAll(toSave);
     }
 }
 ```
 
 ---
 
-## 7) Controller: trigger import & expose data
+# 8) Controller: endpoints to trigger and query
 
-`src/main/java/com/example/api2db/post/PostController.java`
+`src/main/java/com/example/postsdemo/web/PostController.java`
 
 ```java
-package com.example.api2db.post;
+package com.example.postsdemo.web;
 
-import jakarta.validation.constraints.Size;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
+import com.example.postsdemo.domain.PostEntity;
+import com.example.postsdemo.domain.PostRepository;
+import com.example.postsdemo.service.PostService;
+import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -337,183 +359,188 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/posts")
-@RequiredArgsConstructor
 @Validated
 public class PostController {
-    private final PostRepository repo;
-    private final PostImportService importer;
 
-    @PostMapping("/import")
-    public ResponseEntity<ImportResponse> importPosts(@RequestParam(defaultValue = "") @Size(max=100) String keyword) {
-        List<Post> saved = importer.importFilteredPosts(keyword);
-        return ResponseEntity.ok(new ImportResponse(saved.size()));
+    private final PostService postService;
+    private final PostRepository postRepository;
+
+    public PostController(PostService postService, PostRepository postRepository) {
+        this.postService = postService;
+        this.postRepository = postRepository;
     }
 
+    // 1) Trigger fetch+filter+save (by userId)
+    @PostMapping("/sync")
+    public List<PostEntity> syncByUser(
+            @RequestParam @Min(1) long userId
+    ) {
+        return postService.fetchAndSaveByUserId(userId);
+    }
+
+    // 2) Query what's saved (filter locally)
     @GetMapping
-    public List<Post> list() {
-        return repo.findAll();
+    public List<PostEntity> getSaved(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false, name = "titleContains") String titleContains
+    ) {
+        if (userId != null) {
+            return postRepository.findByUserId(userId);
+        }
+        if (titleContains != null && !titleContains.isBlank()) {
+            return postRepository.findByTitleContainingIgnoreCase(titleContains);
+        }
+        return postRepository.findAll();
     }
-
-    public record ImportResponse(int importedCount) {}
 }
 ```
 
----
+(Optional) Simple error handler:
 
-## 8) Application class
-
-`src/main/java/com/example/api2db/Api2dbApplication.java`
+`src/main/java/com/example/postsdemo/web/GlobalExceptionHandler.java`
 
 ```java
-package com.example.api2db;
+package com.example.postsdemo.web;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.*;
 
-@SpringBootApplication
-public class Api2dbApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(Api2dbApplication.class, args);
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> handleValidation(MethodArgumentNotValidException ex) {
+        return Map.of("error", "Invalid request", "details", ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Map<String, String> handleGeneric(Exception ex) {
+        return Map.of("error", "Unexpected error", "details", ex.getMessage());
     }
 }
 ```
 
 ---
 
-## 9) Run it
+# 9) Run it
+
+From IntelliJ **(green play button)** or terminal:
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-Then in another terminal:
+Open the H2 console (optional):
+`http://localhost:8080/h2-console`
+
+* JDBC URL: `jdbc:h2:mem:postsdb`
+* User: `sa` (no password)
+
+---
+
+# 10) Try the endpoints
+
+**Sync & save posts for `userId=1`:**
 
 ```bash
-# Import all posts with titles containing "qui"
-curl -X POST "http://localhost:8080/api/posts/import?keyword=qui"
+curl -X POST "http://localhost:8080/api/posts/sync?userId=1"
+```
 
-# List stored posts
+**List everything saved so far:**
+
+```bash
 curl "http://localhost:8080/api/posts"
 ```
 
-Open H2 console at [http://localhost:8080/h2-console](http://localhost:8080/h2-console) (JDBC URL: `jdbc:h2:mem:api2db`).
+**Filter saved posts by `userId`:**
 
----
+```bash
+curl "http://localhost:8080/api/posts?userId=1"
+```
 
-## 10) Integration Test (with HTTP stubbing)
+**Filter saved posts by title substring:**
 
-`src/test/java/com/example/api2db/post/PostImportServiceTest.java`
-
-```java
-package com.example.api2db.post;
-
-import com.github.tomakehurst.wiremock.WireMockServer;
-import org.junit.jupiter.api.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.util.TestPropertyValues;
-import org.springframework.context.ApplicationContextInitializer;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.test.context.ContextConfiguration;
-
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
-import static org.assertj.core.api.Assertions.assertThat;
-
-@SpringBootTest
-@ContextConfiguration(initializers = PostImportServiceTest.Init.class)
-class PostImportServiceTest {
-    static WireMockServer wm = new WireMockServer(0);
-
-    static class Init implements ApplicationContextInitializer<ConfigurableApplicationContext> {
-        @Override public void initialize(ConfigurableApplicationContext ctx) {
-            wm.start();
-            String base = "http://localhost:" + wm.port();
-            TestPropertyValues.of(
-                    "app.external.base-url=" + base,
-                    "app.external.timeout-ms=2000"
-            ).applyTo(ctx);
-        }
-    }
-
-    @Autowired PostImportService service;
-    @Autowired PostRepository repo;
-
-    @BeforeAll static void beforeAll() {
-        wm.stubFor(get(urlEqualTo("/posts")).willReturn(okJson("""
-            [
-              {"userId":1,"id":101,"title":"hello world","body":"x"},
-              {"userId":2,"id":102,"title":"QUI venture","body":"y"}
-            ]
-        """)));
-    }
-
-    @AfterAll static void afterAll() { wm.stop(); }
-
-    @Test
-    void importsOnlyMatchingKeyword_caseInsensitive() {
-        var saved = service.importFilteredPosts("qui");
-        assertThat(saved).hasSize(1);
-        assertThat(repo.findByExternalId(102L)).isPresent();
-    }
-}
+```bash
+curl "http://localhost:8080/api/posts?titleContains=ipsum"
 ```
 
 ---
 
-## 11) Common interview discussion points
+## What interviewers often look for (and you can mention)
 
-* **Idempotency & upserts:** Unique constraint on `external_id` + `findByExternalId` → update or insert.
-* **Transactions:** Service is `@Transactional` to ensure atomicity across save operations.
-* **Validation:** Request param has `@Size`. You can add Bean Validation on DTOs if you accept input.
-* **Error handling:** Wrap `WebClient` calls with `.onStatus(...)` and map to custom exceptions; expose via `@ControllerAdvice`.
-* **Retries/Backoff:** Add Spring Retry or Resilience4j for flaky APIs.
-* **Mappings:** For more complex transformations, use MapStruct.
-* **Pagination:** Handle external API pagination; stream pages and persist batch-by-batch with `saveAll`.
-* **N+1 queries:** If you add relationships, use `fetch = LAZY` wisely and design endpoints to avoid N+1.
+* **Separation of concerns**: DTO (external shape) vs Entity (DB shape).
+* **Idempotency**: use `externalId` as a unique key to upsert.
+* **Efficiency**: bulk read existing records with `findByExternalIdIn` to avoid N+1 queries.
+* **Validation**: basic request param validation (optional).
+* **Observability**: enable SQL logs, or add logs around the fetch/transform/save path.
+* **Extensibility**: add more filters (e.g., body contains), pagination on GET, switch H2 → Postgres by changing JDBC URL & driver.
 
----
-
-## 12) Variations to practice
-
-1. **Paginated API**: Suppose the external API has `/posts?page=1&size=50`; loop pages until empty.
-2. **Filtering rules**: Filter by `userId`, title length, or body regex.
-3. **Schema changes**: Split `Post` into `User` (1‑N). Import users first, then posts.
-4. **Switch DB**: Replace H2 with PostgreSQL (change JDBC URL/driver/dependency).
-5. **Batching**: Use `repo.saveAll()` in chunks of 100 for large imports.
-6. **Caching**: Cache external calls with Caffeine/Spring Cache.
+If you want, I can also show a **WebClient** version (reactive) or swap H2 for Postgres with a Docker compose file.
 
 ---
 
-## 13) Quick PostgreSQL config (optional)
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/api2db
-    username: postgres
-    password: postgres
-  jpa:
-    hibernate:
-      ddl-auto: validate # use Flyway/Liquibase for prod
-```
-
-Add dependency:
-
-```xml
-<dependency>
-  <groupId>org.postgresql</groupId>
-  <artifactId>postgresql</artifactId>
-  <scope>runtime</scope>
-</dependency>
-```
+Use Lombok
 
 ---
 
-## 14) What to say in the interview
+Great question 👌 — this is actually one of the most important design choices in this little app, and it often comes up in interviews. Let’s break it down:
 
-* Walk through the **flow**: HTTP → DTO → filter → map → upsert (idempotent) → return summary.
-* Mention **testing** with WireMock and **H2** for fast feedback.
-* Call out **transaction boundaries**, **error handling**, and **retries**.
-* If asked about scalability, discuss **pagination**, **batch inserts**, and **backpressure** with reactive streams.
+---
 
-Good luck—build it, run it, and tweak the variations until it’s muscle memory! 🚀
+## `id` (Primary Key in **our** database)
+
+* This is the **internal identifier** generated by **our application’s database** (via JPA/Hibernate).
+* It uses `@Id` and `@GeneratedValue(strategy = GenerationType.IDENTITY)` so the DB auto-increments it.
+* It’s unique only within **our own database**.
+* Purpose:
+
+  * JPA needs a **primary key** to track persistence state (insert/update/delete).
+  * We don’t depend on external APIs for DB integrity.
+  * Keeps the model flexible if the external API changes its identifiers.
+
+---
+
+## `external_id` (Identifier from the **remote API**)
+
+* This comes directly from the JSONPlaceholder API (`"id": 1` in their response).
+* It is **the unique identifier in the API’s world**, but not something we control.
+* We store it in our entity so we can **map back** to the API resource.
+* Purpose:
+
+  * Lets us upsert instead of duplicating (if API sends the same `id=1`, we update instead of inserting a new row).
+  * Useful if we later need to sync updates, link records, or debug by checking "what external record did this come from?"
+
+---
+
+## Why have both?
+
+* **Internal consistency:** Our DB needs its own guaranteed primary key for Hibernate to work properly, regardless of external data.
+* **Decoupling:** If the API changes (e.g., switches to UUIDs, or merges data), we don’t break our DB design.
+* **Idempotency:** We can safely re-fetch the same data and not create duplicates, because we check by `external_id`.
+* **Flexibility:** We could store data from *multiple external sources* in the same table, and still distinguish them.
+
+---
+
+### Interview-friendly analogy
+
+Think of it like this:
+
+* `id` → your employee ID in **your company’s HR system** (internal, for the company’s database).
+* `external_id` → your **passport number** (assigned by an external authority, used when dealing with outside systems).
+  You might need both, depending on context.
+
+---
+
+👉 In our project:
+
+* **`id`** → purely DB/JPA technical key.
+* **`external_id`** → the “real-world” key that ties back to the API.
+
+---
+
+Do you want me to also show you how to **enforce uniqueness** on `external_id` at the JPA level so you can guarantee idempotent saves (no duplicates)?
