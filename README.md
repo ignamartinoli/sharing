@@ -1,4 +1,4 @@
-I have a coding interview in Java with Spring, JPA, Hibernate and more and I need to practice. In it, I will be asked to interact with an external API (use `https://jsonplaceholder.typicode.com/posts` as the consumed API), populate objects, filter them by some parameter and store them in a database. Show me how it's done and how do I set up the project. Don't do Unit Testing. Tell me the step-by-step if I create a Maven project in IntelliJ
+# I have a coding interview in Java with Spring, JPA, Hibernate and more and I need to practice. In it, I will be asked to interact with an external API (use `https://jsonplaceholder.typicode.com/posts` as the consumed API), populate objects, filter them by some parameter and store them in a database. Show me how it's done and how do I set up the project. Don't do Unit Testing. Tell me the step-by-step if I create a Maven project in IntelliJ
 
 ---
 
@@ -484,7 +484,7 @@ If you want, I can also show a **WebClient** version (reactive) or swap H2 for P
 
 ---
 
-Use Lombok
+# Use Lombok
 
 ---
 
